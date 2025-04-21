@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
+import 'dart:math';
 import 'song.dart';
 import 'home_screen.dart';
 import 'search_screen.dart';
@@ -23,8 +24,28 @@ class MyApp extends StatelessWidget {
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          primarySwatch: Colors.blue,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
+          scaffoldBackgroundColor: Colors.black,
+          primaryColor: Colors.white,
+          hintColor: Colors.grey,
+          textTheme: TextTheme(
+            headlineLarge: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+            headlineMedium: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Colors.white),
+            bodyLarge: TextStyle(fontSize: 16, color: Colors.white),
+            bodyMedium: TextStyle(fontSize: 14, color: Colors.grey),
+          ),
+          appBarTheme: AppBarTheme(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            titleTextStyle: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+            iconTheme: IconThemeData(color: Colors.white),
+          ),
+          iconTheme: IconThemeData(color: Colors.white),
+          elevatedButtonTheme: ElevatedButtonThemeData(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.grey[800],
+              foregroundColor: Colors.white,
+            ),
+          ),
         ),
         initialRoute: '/home',
         routes: {
@@ -46,6 +67,8 @@ class AudioPlayerProvider with ChangeNotifier {
   Song? _currentSong;
   bool _isPlaying = false;
   Duration _position = Duration.zero;
+  bool _isShuffling = false;
+  bool _isRepeating = false;
 
   AudioPlayer get audioPlayer => _audioPlayer;
   List<Song> get songs => _songs;
@@ -53,6 +76,8 @@ class AudioPlayerProvider with ChangeNotifier {
   bool get isPlaying => _isPlaying;
   int get currentSongIndex => _currentSongIndex;
   Duration get position => _position;
+  bool get isShuffling => _isShuffling;
+  bool get isRepeating => _isRepeating;
 
   AudioPlayerProvider() {
     _audioPlayer.positionStream.listen((position) {
@@ -66,6 +91,15 @@ class AudioPlayerProvider with ChangeNotifier {
     _audioPlayer.durationStream.listen((duration) {
       notifyListeners();
     });
+    _audioPlayer.processingStateStream.listen((state) {
+      if (state == ProcessingState.completed) {
+        if (_isRepeating) {
+          playSong(_currentSong!); // Lặp lại bài hiện tại
+        } else {
+          playNext();
+        }
+      }
+    });
   }
 
   void setSongs(List<Song> songs) {
@@ -78,19 +112,16 @@ class AudioPlayerProvider with ChangeNotifier {
   }
 
   Future<void> playSong(Song song) async {
-    // Dừng bài hiện tại và đặt lại trạng thái trước khi phát bài mới
     await _audioPlayer.stop();
-    _position = Duration.zero; // Đặt lại vị trí phát về 0
+    _position = Duration.zero;
     notifyListeners();
 
-    // Cập nhật bài hát hiện tại
     final index = _songs.indexOf(song);
     if (index != -1) {
       _currentSongIndex = index;
       _currentSong = song;
     }
 
-    // Phát bài mới
     try {
       await _audioPlayer.setUrl(song.url);
       await _audioPlayer.play();
@@ -113,19 +144,45 @@ class AudioPlayerProvider with ChangeNotifier {
   }
 
   void playNext() {
-    if (_currentSongIndex < _songs.length - 1) {
+    if (_isShuffling) {
+      _currentSongIndex = Random().nextInt(_songs.length);
+    } else if (_currentSongIndex < _songs.length - 1) {
       _currentSongIndex++;
-      _currentSong = _songs[_currentSongIndex];
-      playSong(_currentSong!);
+    } else {
+      _currentSongIndex = 0;
     }
+    _currentSong = _songs[_currentSongIndex];
+    playSong(_currentSong!);
   }
 
   void playPrevious() {
-    if (_currentSongIndex > 0) {
+    if (_isShuffling) {
+      _currentSongIndex = Random().nextInt(_songs.length);
+    } else if (_currentSongIndex > 0) {
       _currentSongIndex--;
-      _currentSong = _songs[_currentSongIndex];
-      playSong(_currentSong!);
+    } else {
+      _currentSongIndex = _songs.length - 1;
     }
+    _currentSong = _songs[_currentSongIndex];
+    playSong(_currentSong!);
+  }
+
+  Future<void> stopAndClear() async {
+    await _audioPlayer.stop();
+    _currentSong = null;
+    _isPlaying = false;
+    _position = Duration.zero;
+    notifyListeners();
+  }
+
+  void toggleShuffle() {
+    _isShuffling = !_isShuffling;
+    notifyListeners();
+  }
+
+  void toggleRepeat() {
+    _isRepeating = !_isRepeating;
+    notifyListeners();
   }
 
   @override

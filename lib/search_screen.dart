@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:music_app/main.dart';
 import 'package:provider/provider.dart';
 import 'song.dart';
 import 'song_provider.dart';
+import 'song_tile.dart';
+import 'mini_player.dart';
 
 class SearchScreen extends StatefulWidget {
   @override
@@ -16,7 +17,6 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void initState() {
     super.initState();
-    // Lắng nghe thay đổi trong TextField để cập nhật query
     _searchController.addListener(() {
       setState(() {
         _searchQuery = _searchController.text.trim();
@@ -36,11 +36,8 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text('Search', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+        title: Text('Search'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -50,8 +47,8 @@ class _SearchScreenState extends State<SearchScreen> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Artists, songs, or albums',
-                hintStyle: TextStyle(color: Colors.grey),
-                prefixIcon: Icon(Icons.search, color: Colors.white),
+                hintStyle: TextStyle(color: Theme.of(context).hintColor),
+                prefixIcon: Icon(Icons.search),
                 filled: true,
                 fillColor: Colors.grey[800],
                 border: OutlineInputBorder(
@@ -59,7 +56,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   borderSide: BorderSide.none,
                 ),
               ),
-              style: TextStyle(color: Colors.white),
+              style: Theme.of(context).textTheme.bodyLarge,
             ),
             SizedBox(height: 20),
             Expanded(
@@ -68,11 +65,11 @@ class _SearchScreenState extends State<SearchScreen> {
                   if (songProvider.isLoading) {
                     return Center(child: CircularProgressIndicator());
                   } else if (songProvider.error != null) {
-                    return Center(child: Text('Error: ${songProvider.error}', style: TextStyle(color: Colors.white)));
+                    return Center(child: Text('Error: ${songProvider.error}', style: Theme.of(context).textTheme.bodyLarge));
                   } else if (_searchQuery.isEmpty) {
-                    return Center(child: Text('Enter a search term to find songs', style: TextStyle(color: Colors.white)));
+                    return Center(child: Text('Enter a search term to find songs', style: Theme.of(context).textTheme.bodyLarge));
                   } else if (songProvider.songs.isEmpty) {
-                    return Center(child: Text('No songs found', style: TextStyle(color: Colors.white)));
+                    return Center(child: Text('No songs found', style: Theme.of(context).textTheme.bodyLarge));
                   }
 
                   final songs = songProvider.songs;
@@ -80,31 +77,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     itemCount: songs.length,
                     itemBuilder: (context, index) {
                       final song = songs[index];
-                      return ListTile(
-                        leading: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            song.coverUrl,
-                            width: 50,
-                            height: 50,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                width: 50,
-                                height: 50,
-                                color: Colors.grey,
-                                child: Icon(Icons.broken_image, color: Colors.white),
-                              );
-                            },
-                          ),
-                        ),
-                        title: Text(song.title, style: TextStyle(color: Colors.white)),
-                        subtitle: Text('${song.artist} • ${song.album}', style: TextStyle(color: Colors.grey)),
-                        onTap: () {
-                          Navigator.pushNamed(context, '/player');
-                          Provider.of<AudioPlayerProvider>(context, listen: false).playSong(song);
-                        },
-                      );
+                      return SongTile(song: song, isHorizontal: false);
                     },
                   );
                 },
@@ -113,20 +86,26 @@ class _SearchScreenState extends State<SearchScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: Colors.black,
-        selectedItemColor: Colors.white,
-        unselectedItemColor: Colors.grey,
-        currentIndex: 1,
-        items: [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
-          BottomNavigationBarItem(icon: Icon(Icons.library_music), label: 'Your Library'),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          MiniPlayer(),
+          BottomNavigationBar(
+            backgroundColor: Colors.black,
+            selectedItemColor: Colors.white,
+            unselectedItemColor: Colors.grey,
+            currentIndex: 1,
+            items: [
+              BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+              BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Search'),
+              BottomNavigationBarItem(icon: Icon(Icons.library_music), label: 'Your Library'),
+            ],
+            onTap: (index) {
+              if (index == 0) Navigator.pushNamed(context, '/home');
+              if (index == 2) Navigator.pushNamed(context, '/library');
+            },
+          ),
         ],
-        onTap: (index) {
-          if (index == 0) Navigator.pushNamed(context, '/home');
-          if (index == 2) Navigator.pushNamed(context, '/library');
-        },
       ),
     );
   }
