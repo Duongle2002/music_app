@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
 import 'main.dart';
 
@@ -24,28 +26,34 @@ class PlayerScreen extends StatelessWidget {
               onPressed: () => Navigator.pop(context),
             ),
           ),
-          body: Padding(
+          body: audioProvider.audioPlayer.processingState == ProcessingState.buffering
+              ? Center(child: CircularProgressIndicator())
+              : Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Hero(
-                  tag: 'song-${currentSong.id}',
+                  tag: 'song-${currentSong.id}', // This is fine as there's only one PlayerScreen
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      currentSong.coverUrl,
+                    child: CachedNetworkImage(
+                      imageUrl: currentSong.coverUrl,
                       width: 300,
                       height: 300,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: 300,
-                          height: 300,
-                          color: Colors.grey,
-                          child: Icon(Icons.broken_image, color: Colors.white),
-                        );
-                      },
+                      placeholder: (context, url) => Container(
+                        width: 300,
+                        height: 300,
+                        color: Colors.grey,
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        width: 300,
+                        height: 300,
+                        color: Colors.grey,
+                        child: Icon(Icons.broken_image, color: Colors.white),
+                      ),
                     ),
                   ),
                 ),
@@ -64,7 +72,13 @@ class PlayerScreen extends StatelessWidget {
                   value: position.inSeconds.toDouble(),
                   max: duration.inSeconds.toDouble(),
                   onChanged: (value) async {
-                    await audioProvider.audioPlayer.seek(Duration(seconds: value.toInt()));
+                    try {
+                      await audioProvider.audioPlayer.seek(Duration(seconds: value.toInt()));
+                    } catch (e) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Không thể thay đổi vị trí bài hát')),
+                      );
+                    }
                   },
                   activeColor: Theme.of(context).primaryColor,
                   inactiveColor: Theme.of(context).hintColor,

@@ -6,7 +6,7 @@ class ApiService {
   // Lấy danh sách bài hát mặc định từ Apple Music API
   Future<List<Song>> fetchSongs() async {
     final response = await http.get(
-      Uri.parse('https://itunes.apple.com/search?term=The+Beatles&media=music&entity=song&limit=10'),
+      Uri.parse('https://itunes.apple.com/search?term=The+Beatles&media=music&entity=song&limit=20'),
     );
 
     if (response.statusCode == 200) {

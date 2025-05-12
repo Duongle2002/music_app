@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
 import 'main.dart';
 import 'song.dart';
@@ -28,22 +29,26 @@ class MiniPlayer extends StatelessWidget {
                 Row(
                   children: [
                     Hero(
-                      tag: 'song-${currentSong.id}',
+                      tag: 'song-${currentSong.id}', // This is fine as there's only one MiniPlayer
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(4),
-                        child: Image.network(
-                          currentSong.coverUrl,
+                        child: CachedNetworkImage(
+                          imageUrl: currentSong.coverUrl,
                           width: 40,
                           height: 40,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              width: 40,
-                              height: 40,
-                              color: Colors.grey,
-                              child: Icon(Icons.broken_image, color: Colors.white),
-                            );
-                          },
+                          placeholder: (context, url) => Container(
+                            width: 40,
+                            height: 40,
+                            color: Colors.grey,
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
+                          errorWidget: (context, url, error) => Container(
+                            width: 40,
+                            height: 40,
+                            color: Colors.grey,
+                            child: Icon(Icons.broken_image, color: Colors.white),
+                          ),
                         ),
                       ),
                     ),
@@ -72,6 +77,16 @@ class MiniPlayer extends StatelessWidget {
                       ),
                       onPressed: () {
                         audioProvider.togglePlayPause();
+                      },
+                    ),
+                    IconButton(
+                      icon: Icon(
+                        Icons.skip_next,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      onPressed: () {
+                        audioProvider.playNext();
                       },
                     ),
                     IconButton(

@@ -17,15 +17,27 @@ class Song {
     required this.coverUrl,
   });
 
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'artist': artist,
+      'album': album,
+      'duration': duration,
+      'url': url,
+      'coverUrl': coverUrl,
+    };
+  }
+
   factory Song.fromJson(Map<String, dynamic> json) {
     return Song(
-      id: json['id'],
-      title: json['title'],
-      artist: json['artist'],
-      album: json['album'],
-      duration: json['duration'],
-      url: json['url'],
-      coverUrl: json['cover_url'],
+      id: json['id'] ?? 0,
+      title: json['title'] ?? 'Unknown Title',
+      artist: json['artist'] ?? 'Unknown Artist',
+      album: json['album'] ?? 'Unknown Album',
+      duration: json['duration'] ?? 30,
+      url: json['url'] ?? '',
+      coverUrl: json['coverUrl'] ?? '',
     );
   }
 }

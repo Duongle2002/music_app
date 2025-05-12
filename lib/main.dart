@@ -1,5 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:music_app/firebase_options.dart';
+import 'package:music_app/login_screen.dart';
+import 'package:music_app/signup_screen.dart';
 import 'package:provider/provider.dart';
 import 'dart:math';
 import 'song.dart';
@@ -8,8 +13,15 @@ import 'search_screen.dart';
 import 'library_screen.dart';
 import 'player_screen.dart';
 import 'song_provider.dart';
+import 'offline_manager.dart';
+import 'auth_provider.dart';
+import 'profile_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(MyApp());
 }
 
@@ -20,6 +32,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => SongProvider()),
         ChangeNotifierProvider(create: (_) => AudioPlayerProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProviders()),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -47,19 +60,47 @@ class MyApp extends StatelessWidget {
             ),
           ),
         ),
-        initialRoute: '/home',
+        home: AuthWrapper(),
         routes: {
           '/home': (context) => HomeScreen(),
           '/search': (context) => SearchScreen(),
           '/library': (context) => LibraryScreen(),
           '/player': (context) => PlayerScreen(),
           '/profile': (context) => ProfileScreen(),
+          '/login': (context) => LoginScreen(),
+          '/signup': (context) => SignUpScreen(),
         },
       ),
     );
   }
 }
 
+class AuthWrapper extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.hasError) {
+          return Scaffold(
+            body: Center(child: Text('Lỗi xác thực. Vui lòng thử lại.')),
+          );
+        }
+        if (snapshot.hasData) {
+          return HomeScreen();
+        }
+        return LoginScreen();
+      },
+    );
+  }
+}
+
+// Keep AudioPlayerProvider unchanged
 class AudioPlayerProvider with ChangeNotifier {
   final AudioPlayer _audioPlayer = AudioPlayer();
   List<Song> _songs = [];
@@ -69,6 +110,9 @@ class AudioPlayerProvider with ChangeNotifier {
   Duration _position = Duration.zero;
   bool _isShuffling = false;
   bool _isRepeating = false;
+  Song? _nextSong;
+  final OfflineManager _offlineManager = OfflineManager();
+  bool _isUserPaused = false;
 
   AudioPlayer get audioPlayer => _audioPlayer;
   List<Song> get songs => _songs;
@@ -92,9 +136,9 @@ class AudioPlayerProvider with ChangeNotifier {
       notifyListeners();
     });
     _audioPlayer.processingStateStream.listen((state) {
-      if (state == ProcessingState.completed) {
+      if (state == ProcessingState.completed && !_isUserPaused) {
         if (_isRepeating) {
-          playSong(_currentSong!); // Lặp lại bài hiện tại
+          playSong(_currentSong!);
         } else {
           playNext();
         }
@@ -107,6 +151,7 @@ class AudioPlayerProvider with ChangeNotifier {
     if (_songs.isNotEmpty) {
       _currentSongIndex = 0;
       _currentSong = _songs[_currentSongIndex];
+      _preloadNextSong();
     }
     notifyListeners();
   }
@@ -114,6 +159,7 @@ class AudioPlayerProvider with ChangeNotifier {
   Future<void> playSong(Song song) async {
     await _audioPlayer.stop();
     _position = Duration.zero;
+    _isUserPaused = false;
     notifyListeners();
 
     final index = _songs.indexOf(song);
@@ -123,9 +169,15 @@ class AudioPlayerProvider with ChangeNotifier {
     }
 
     try {
-      await _audioPlayer.setUrl(song.url);
+      final localPath = await _offlineManager.getLocalSongPath(song);
+      if (localPath != null) {
+        await _audioPlayer.setFilePath(localPath);
+      } else {
+        await _audioPlayer.setUrl(song.url);
+      }
       await _audioPlayer.play();
       _isPlaying = true;
+      _preloadNextSong();
     } catch (e) {
       _isPlaying = false;
       print('Error playing song: $e');
@@ -133,11 +185,38 @@ class AudioPlayerProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _preloadNextSong() async {
+    _nextSong = null;
+    int nextIndex;
+    if (_isShuffling) {
+      nextIndex = Random().nextInt(_songs.length);
+    } else if (_currentSongIndex < _songs.length - 1) {
+      nextIndex = _currentSongIndex + 1;
+    } else {
+      nextIndex = 0;
+    }
+    _nextSong = _songs[nextIndex];
+    if (_nextSong != null) {
+      try {
+        final localPath = await _offlineManager.getLocalSongPath(_nextSong!);
+        if (localPath != null) {
+          await _audioPlayer.setFilePath(localPath, preload: true);
+        } else {
+          await _audioPlayer.setUrl(_nextSong!.url, preload: true);
+        }
+      } catch (e) {
+        print('Error preloading next song: $e');
+      }
+    }
+  }
+
   Future<void> togglePlayPause() async {
     if (_isPlaying) {
       await _audioPlayer.pause();
+      _isUserPaused = true;
     } else {
       await _audioPlayer.play();
+      _isUserPaused = false;
     }
     _isPlaying = !_isPlaying;
     notifyListeners();
@@ -170,18 +249,41 @@ class AudioPlayerProvider with ChangeNotifier {
   Future<void> stopAndClear() async {
     await _audioPlayer.stop();
     _currentSong = null;
+    _nextSong = null;
     _isPlaying = false;
     _position = Duration.zero;
+    _isUserPaused = false;
     notifyListeners();
   }
 
   void toggleShuffle() {
     _isShuffling = !_isShuffling;
+    if (_isShuffling) {
+      _isRepeating = false;
+    }
+    _preloadNextSong();
     notifyListeners();
   }
 
   void toggleRepeat() {
     _isRepeating = !_isRepeating;
+    if (_isRepeating) {
+      _isShuffling = false;
+    }
+    notifyListeners();
+  }
+
+  Future<void> downloadSong(Song song) async {
+    await _offlineManager.downloadSong(song);
+    notifyListeners();
+  }
+
+  Future<bool> isSongDownloaded(Song song) async {
+    return await _offlineManager.isSongDownloaded(song);
+  }
+
+  Future<void> deleteSong(Song song) async {
+    await _offlineManager.deleteSong(song);
     notifyListeners();
   }
 
@@ -189,19 +291,5 @@ class AudioPlayerProvider with ChangeNotifier {
   void dispose() {
     _audioPlayer.dispose();
     super.dispose();
-  }
-}
-
-class ProfileScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Profile'),
-      ),
-      body: Center(
-        child: Text('Profile Screen'),
-      ),
-    );
   }
 }

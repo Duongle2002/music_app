@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'song.dart';
@@ -13,22 +14,27 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text.trim();
+      if (_debounce?.isActive ?? false) _debounce!.cancel();
+      _debounce = Timer(const Duration(milliseconds: 500), () {
+        setState(() {
+          _searchQuery = _searchController.text.trim();
+        });
+        if (_searchQuery.isNotEmpty) {
+          Provider.of<SongProvider>(context, listen: false).searchSongs(_searchQuery);
+        }
       });
-      if (_searchQuery.isNotEmpty) {
-        Provider.of<SongProvider>(context, listen: false).searchSongs(_searchQuery);
-      }
     });
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
